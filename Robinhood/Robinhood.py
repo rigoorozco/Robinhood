@@ -889,3 +889,157 @@ class Robinhood:
 
         return self.place_order(instrument, quantity, bid_price, transaction)
 
+
+    #################### Added by Rigo #####################
+
+
+    def place_market_order(
+            self,
+            instrument,
+            quantity,
+            transaction,
+            bid_price = 0.0,
+            trigger='immediate',
+            order='market',
+            time_in_force = 'gfd'
+        ):
+        
+        if not bid_price:
+            bid_price = self.quote_data(instrument['symbol'])['bid_price']
+
+        payload = {
+            'account': self.get_account()['url'],
+            'instrument': unquote(instrument['url']),
+            'price': float(bid_price),
+            'quantity': quantity,
+            'side': transaction,
+            'symbol': instrument['symbol'],
+            'time_in_force': time_in_force.lower(),
+            'trigger': trigger,
+            'type': order.lower()
+        }
+        
+        res = self.session.post(
+            self.endpoints['orders'],
+            data=payload
+        )
+
+        if res.status_code == 201:
+            res = res.json()
+            order_ID = res['url'][res['url'].index("orders")+7:-1]
+            return order_ID
+        else:
+            raise Exception("Could not place order: " + res.text)
+
+
+    def place_limit_order(
+            self,
+            instrument,
+            quantity,
+            limit_price,
+            transaction,
+            trigger='immediate',
+            order='limit',
+            time_in_force = 'gfd'
+        ):
+        
+        payload = {
+            'account': self.get_account()['url'],
+            'instrument': unquote(instrument['url']),
+            'price': float(limit_price),
+            'quantity': quantity,
+            'side': transaction,
+            'symbol': instrument['symbol'],
+            'time_in_force': time_in_force.lower(),
+            'trigger': trigger,
+            'type': order.lower()
+        }
+        
+        res = self.session.post(
+            self.endpoints['orders'],
+            data=payload
+        )
+
+        if res.status_code == 201:
+            res = res.json()
+            order_ID = res['url'][res['url'].index("orders")+7:-1]
+            return order_ID
+        else:
+            raise Exception("Could not place order: " + res.text)
+
+
+    def place_stop_limit_order(
+            self,
+            instrument,
+            quantity,
+            limit_price,
+            stop_price,
+            transaction,
+            trigger='stop',
+            order='limit',
+            time_in_force = 'gfd'
+        ):
+        
+        payload = {
+            'account': self.get_account()['url'],
+            'instrument': unquote(instrument['url']),
+            'price': float(limit_price),
+            'stop_price': float(stop_price),
+            'quantity': quantity,
+            'side': transaction,
+            'symbol': instrument['symbol'],
+            'time_in_force': time_in_force.lower(),
+            'trigger': trigger,
+            'type': order,
+        }
+        
+        res = self.session.post(
+            self.endpoints['orders'],
+            data=payload
+        )
+
+        if res.status_code == 201:
+            res = res.json()
+            order_ID = res['url'][res['url'].index("orders")+7:-1]
+            return order_ID
+        else:
+            raise Exception("Could not place order: " + res.text)
+
+
+    def place_stop_loss_order(
+            self,
+            instrument,
+            quantity,
+            stop_price,
+            transaction,
+            trigger='stop',
+            order='market',
+            time_in_force = 'gfd'
+        ):
+        
+        payload = {
+            'account': self.get_account()['url'],
+            'instrument': unquote(instrument['url']),
+            'stop_price': float(stop_price),
+            'quantity': quantity,
+            'side': transaction,
+            'symbol': instrument['symbol'],
+            'time_in_force': time_in_force.lower(),
+            'trigger': trigger,
+            'type': order.lower()
+        }
+        
+        res = self.session.post(
+            self.endpoints['orders'],
+            data=payload
+        )
+
+        if res.status_code == 201:
+            res = res.json()
+            order_ID = res['url'][res['url'].index("orders")+7:-1]
+            return order_ID
+        else:
+            raise Exception("Could not place order: " + res.text)
+
+
+
