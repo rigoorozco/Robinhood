@@ -898,7 +898,7 @@ class Robinhood:
             instrument,
             quantity,
             transaction,
-            bid_price = 0.0,
+            bid_price=0.0,
             trigger='immediate',
             order='market',
             time_in_force = 'gfd'
@@ -1040,6 +1040,114 @@ class Robinhood:
             return order_ID
         else:
             raise Exception("Could not place order: " + res.text)
+
+
+    def cancel_order(self, order_id):
+        payload = {}
+
+        res = self.session.post(
+            self.endpoints['orders'] + order_id + "/cancel/",
+            data=payload
+        )
+
+        if res.status_code == 200:
+            return res
+        else:
+            raise Exception("Could not cancel order: " + res.text)
+
+
+    #################### Added from JGrauPirozzi #####################
+
+
+    def get_user_info(self):
+        ''' Pulls user info from API and stores it in Robinhood object''' 
+        res = self.session.get(self.endpoints['user'])
+        if res.status_code == 200:
+            self.first_name = res.json()['first_name']
+            self.last_name = res.json()['last_name']
+        else:
+            raise Exception("Could not get user info: " + res.text)
+        res = self.session.get(self.endpoints['user'] + 'basic_info/')
+        if res.status_code == 200:
+            res = res.json()
+            self.phone_number = res['phone_number']
+            self.city = res['city']
+            self.number_dependents = res['number_dependents']
+            self.citizenship = res['citizenship']
+            self.marital_status = res['marital_status']
+            self.zipcode = res['zipcode']
+            self.state_residence = res['state']
+            self.date_of_birth = res['date_of_birth']
+            self.address = res['address']
+            self.tax_id_ssn = res['tax_id_ssn']
+        else:
+            raise Exception("Could not get basic user info: " + res.text)
+
+
+    def order_details(self, order_ID):
+        ''' Returns an order object which contains information about an order 
+        and its status'''
+        res = self.session.get(self.endpoints['orders'] + order_ID + "/")
+        if res.status_code == 200:
+            return res.json()
+        else:
+            raise Exception("Could not get order status: " + res.text)
+
+
+    def order_status(self, order_ID):
+        ''' Returns an order status string'''
+        return self.order_details(order_ID)['state']
+
+
+    def advanced_order_status(self, order_ID):
+        ''' Will return number of shares completed, average price ... as a dict '''
+        pass
+
+
+    def get_order(self, order_ID):
+        ''' Will return a dict of order information for a given order ID '''
+        pass
+
+
+    def list_orders(self):
+        ''' returns a list of all order_IDs, ordered from newest to oldest '''
+        res = self.session.get(self.endpoints['orders'])
+        if res.status_code == 200:
+            orders = []
+            for i in res.json()['results']:
+                URL = i['url']
+                orders.append(URL[URL.index("orders")+7:-1])
+            return orders
+        else:
+            raise Exception("Could not retrieve orders: " + res.text)
+
+
+    def list_order_details(self):
+        ''' Generates a dictionary where keys are order_IDs and values are 
+        order objects. '''
+        detailed_orders = {}
+        for i in self.list_orders():
+            order = self.order_details(i)
+            order['symbol'] = self.session.get(order['instrument']).json()['symbol']
+            detailed_orders[i] = order
+        return detailed_orders
+
+
+    def list_open_orders(self):
+        open_orders = {}
+
+        for order in self.list_orders():
+            details = self.order_details(order)
+            if details['state'] == 'queued':
+                open_orders[order] = {
+                                        'dt': details['created_at'],
+                                        'asset': self.session.get(details['instrument']).json()['symbol'],
+                                        'amount': details['quantity'],
+                                        'stop_price': details['stop_price'],
+                                        'limit_price': details['price']
+                                    }
+
+        return open_orders
 
 
 
