@@ -170,6 +170,13 @@ class Robinhood:
     #                               GET DATA
     ###########################################################################
 
+    def get_url_content_json(self, url):
+        """fetch url content"""
+        res = self.session.get(url)
+        res.raise_for_status()  #will throw without auth
+        data = res.json()
+        return data
+
     def investment_profile(self):
         """Fetch investment_profile """
 
@@ -180,25 +187,15 @@ class Robinhood:
         return data
 
 
-    def instruments(self, stock):
-        """Fetch instruments endpoint
-
-            Args:
-                stock (str): stock ticker
-
-            Returns:
-                (:obj:`dict`): JSON contents from `instruments` endpoint
-        """
-
-        res = self.session.get(self.endpoints['instruments'], params={'query': stock.upper()})
-        res.raise_for_status()
-        res = res.json()
-
-        # if requesting all, return entire object so may paginate with ['next']
-        if (stock == ""):
-            return res
-
-        return res['results']
+    def instruments(self, symbol):
+        ''' Generates an instrument object. Currently this is only used for 
+        placing orders, and generating and using the instrument object are handled
+        for you, so you can ignore this method'''
+        res = self.session.get(self.endpoints['instruments'], params={'query':symbol.upper()})
+        if res.status_code == 200:
+            return res.json()['results']
+        else:
+            raise Exception("Could not generate instrument object: %s " % res.headers)
 
 
     def quote_data(self, stock=''):
@@ -890,9 +887,6 @@ class Robinhood:
         return self.place_order(instrument, quantity, bid_price, transaction)
 
 
-    #################### Added by Rigo #####################
-
-
     def place_market_order(
             self,
             instrument,
@@ -1056,9 +1050,6 @@ class Robinhood:
             raise Exception("Could not cancel order: " + res.text)
 
 
-    #################### Added from JGrauPirozzi #####################
-
-
     def get_user_info(self):
         ''' Pulls user info from API and stores it in Robinhood object''' 
         res = self.session.get(self.endpoints['user'])
@@ -1138,7 +1129,9 @@ class Robinhood:
 
         for order in self.list_orders():
             details = self.order_details(order)
-            if details['state'] == 'queued':
+            if details['state'] == 'queued' or \
+               details['state'] == 'confirmed' or \
+               details['state'] == 'partially_filled':
                 open_orders[order] = {
                                         'dt': details['created_at'],
                                         'asset': self.session.get(details['instrument']).json()['symbol'],
