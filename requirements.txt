@@ -1,2 +1,5 @@
 requests~=2.13.0
 six~=1.10.0
+pytest~=3.0.0
+pytest_cov~=2.4.0
+flaky~=3.3.0
