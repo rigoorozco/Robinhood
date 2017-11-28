@@ -19,3 +19,6 @@ install:
 script:
   - flake8 Robinhood/Robinhood.py
   - nosetests --with-coverage
+
+after_success:
+  - coveralls
