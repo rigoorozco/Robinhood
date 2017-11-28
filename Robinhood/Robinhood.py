@@ -503,6 +503,7 @@ class Robinhood:
         try:
             return float(self.portfolios['extended_hours_equity'])
         except TypeError:
+            log.warn('Failed to get extended hours equity')
             return None
 
     @property
