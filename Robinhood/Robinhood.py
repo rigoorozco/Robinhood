@@ -169,7 +169,7 @@ class Robinhood:
     def investment_profile(self):
         # Fetch investment_profile
 
-                # Returns:
+        # Returns:
         #     dictionary with investment profile information
 
         res = self.session.get(self.endpoints['investment_profile'])
@@ -179,7 +179,7 @@ class Robinhood:
 
     def instruments(self, symbol):
         # Generates an instrument object. Currently this is only used for
-                # placing orders
+        # placing orders
         res = self.session.get(self.endpoints['instruments'],
                                params={'query': symbol.upper()})
         if res.status_code == 200:
