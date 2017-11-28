@@ -9,7 +9,6 @@ from six.moves import input
 
 import getpass
 import requests
-import six
 
 from dateutil.parser import parse
 
@@ -45,7 +44,8 @@ class Robinhood:
     endpoints = {
         "login": "https://api.robinhood.com/api-token-auth/",
         "logout": "https://api.robinhood.com/api-token-logout/",
-        "investment_profile": "https://api.robinhood.com/user/investment_profile/",
+        "investment_profile":
+        "https://api.robinhood.com/user/investment_profile/",
         "accounts": "https://api.robinhood.com/accounts/",
         "ach_iav_auth": "https://api.robinhood.com/ach/iav/auth/",
         "ach_relationships": "https://api.robinhood.com/ach/relationships/",
@@ -63,7 +63,8 @@ class Robinhood:
         "positions": "https://api.robinhood.com/positions/",
         "quotes": "https://api.robinhood.com/quotes/",
         "historicals": "https://api.robinhood.com/quotes/historicals/",
-        "document_requests": "https://api.robinhood.com/upload/document_requests/",
+        "document_requests":
+        "https://api.robinhood.com/upload/document_requests/",
         "user": "https://api.robinhood.com/user/",
         "watchlists": "https://api.robinhood.com/watchlists/",
         "news": "https://api.robinhood.com/midlands/news/",
@@ -76,15 +77,16 @@ class Robinhood:
     headers = None
     auth_token = None
 
-
     def __init__(self):
         self.session = requests.session()
         self.session.proxies = getproxies()
         self.headers = {
             "Accept": "*/*",
             "Accept-Encoding": "gzip, deflate",
-            "Accept-Language": "en;q=1, fr;q=0.9, de;q=0.8, ja;q=0.7, nl;q=0.6, it;q=0.5",
-            "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+            "Accept-Language":
+            "en;q=1, fr;q=0.9, de;q=0.8, ja;q=0.7, nl;q=0.6, it;q=0.5",
+            "Content-Type":
+            "application/x-www-form-urlencoded; charset=utf-8",
             "X-Robinhood-API-Version": "1.0.0",
             "Connection": "keep-alive",
             "User-Agent": "Robinhood/823 (iPhone; iOS 7.1.2; Scale/2.00)"
@@ -92,8 +94,7 @@ class Robinhood:
 
         self.session.headers = self.headers
 
-
-    def login_prompt(self): #pragma: no cover
+    def login_prompt(self):  # pragma: no cover
         # Prompts user for username and password and calls login()
 
         username = input("Username: ")
@@ -101,11 +102,10 @@ class Robinhood:
 
         return self.login(username=username, password=password)
 
-
     def login(self,
-                  username,
-                  password,
-                  mfa_code=None):
+              username,
+              password,
+              mfa_code=None):
         # Save and test login info for Robinhood accounts
 
         # Args:
@@ -130,11 +130,11 @@ class Robinhood:
             res.raise_for_status()
             data = res.json()
         except requests.exceptions.HTTPError:
-            raise RH_exception.LoginFailed()
+            raise LoginFailed()
 
-        if 'mfa_required' in data.keys():           #pragma: no cover
-            raise RH_exception.TwoFactorRequired()
-            #requires a second call to enable 2FA
+        if 'mfa_required' in data.keys():           # pragma: no cover
+            raise TwoFactorRequired()
+            # requires a second call to enable 2FA
 
         if 'token' in data.keys():
             self.auth_token = data['token']
@@ -142,7 +142,6 @@ class Robinhood:
             return True
 
         return False
-
 
     def logout(self):
         # Logout from Robinhood
@@ -161,13 +160,11 @@ class Robinhood:
 
         return req
 
-
     def get_url_content_json(self, url):
         res = self.session.get(url)
         res.raise_for_status()  # will throw without auth
         data = res.json()
         return data
-
 
     def investment_profile(self):
         # Fetch investment_profile
@@ -180,21 +177,19 @@ class Robinhood:
         data = res.json()
         return data
 
-
     def instruments(self, symbol):
         # Generates an instrument object. Currently this is only used for
                 # placing orders
-        res = self.session.get(self.endpoints['instruments'], \
-              params={'query':symbol.upper()})
+        res = self.session.get(self.endpoints['instruments'],
+                               params={'query': symbol.upper()})
         if res.status_code == 200:
             result = res.json()['results']
             if len(result) > 0 and result[0]['symbol'] == symbol.upper():
                 return result[0]
             else:
-                 raise Exception("Symbol queried was not found.")
+                raise Exception("Symbol queried was not found.")
         else:
             raise Exception("Could not generate instrument object")
-
 
     def quote_data(self, stock):
         # Fetch stock quote
@@ -217,7 +212,6 @@ class Robinhood:
 
         return data
 
-
     def get_historical_quotes(self, stock, interval, span,
                               bounds=Bounds.REGULAR):
         # Fetch historical data for stock
@@ -238,7 +232,7 @@ class Robinhood:
         #     Returns:
         #         (:obj:`dict`) values returned from `historicals` endpoint
 
-        if isinstance(bounds, str): #recast to Enum
+        if isinstance(bounds, str):  # recast to Enum
             bounds = Bounds(bounds)
 
         params = {
@@ -251,7 +245,6 @@ class Robinhood:
         res = self.session.get(self.endpoints['historicals'], params=params)
         return res.json()
 
-
     def get_news(self, stock):
         # Fetch news endpoint
         #     Args:
@@ -262,7 +255,6 @@ class Robinhood:
 
         url = self.endpoints['news'] + stock.upper() + "/"
         return self.session.get(url).json()
-
 
     def ask_price(self, stock):
         # Get asking price for a stock
@@ -278,7 +270,6 @@ class Robinhood:
 
         return float(self.quote_data(stock)['ask_price'])
 
-
     def ask_size(self, stock):
         # Get ask size for a stock
 
@@ -292,7 +283,6 @@ class Robinhood:
         #         (int): ask size
 
         return int(self.quote_data(stock)['ask_size'])
-
 
     def bid_price(self, stock):
         # Get bid price for a stock
@@ -308,7 +298,6 @@ class Robinhood:
 
         return float(self.quote_data(stock)['bid_price'])
 
-
     def bid_size(self, stock):
         # Get bid size for a stock
 
@@ -322,7 +311,6 @@ class Robinhood:
         #         (int): bid size
 
         return int(self.quote_data(stock)['bid_size'])
-
 
     def last_trade_price(self, stock):
         # Get last trade price for a stock
@@ -338,7 +326,6 @@ class Robinhood:
 
         return float(self.quote_data(stock)['last_trade_price'])
 
-
     def previous_close(self, stock):
         # Get previous closing price for a stock
 
@@ -352,7 +339,6 @@ class Robinhood:
         #         (float): previous closing price
 
         return float(self.quote_data(stock)['previous_close'])
-
 
     def previous_close_date(self, stock):
         # Get previous closing date for a stock
@@ -368,7 +354,6 @@ class Robinhood:
 
         return self.quote_data(stock)['previous_close_date']
 
-
     def adjusted_previous_close(self, stock):
         # Get adjusted previous closing price for a stock
 
@@ -382,7 +367,6 @@ class Robinhood:
         #         (float): adjusted previous closing price
 
         return float(self.quote_data(stock)['adjusted_previous_close'])
-
 
     def symbol(self, stock):
         # Get symbol for a stock
@@ -398,7 +382,6 @@ class Robinhood:
 
         return self.quote_data(stock)['symbol']
 
-
     def last_updated_at(self, stock):
         # Get last update datetime
 
@@ -413,7 +396,6 @@ class Robinhood:
 
         return self.quote_data(stock)['updated_at']
 
-   
     def last_updated_at_datetime(self, stock):
         # Get last updated datetime
 
@@ -433,7 +415,6 @@ class Robinhood:
 
         return result
 
-
     @property
     def account(self):
         # Fetch account information
@@ -442,11 +423,10 @@ class Robinhood:
         #         (:obj:`dict`): `accounts` endpoint payload
 
         res = self.session.get(self.endpoints['accounts'])
-        res.raise_for_status()  #auth required
+        res.raise_for_status()  # auth required
         res = res.json()
 
         return res['results'][0]
-
 
     @property
     def fundamentals(self, stock):
@@ -462,7 +442,7 @@ class Robinhood:
 
         # Check for validity of symbol
         req = requests.get(url)
-       
+
         if req.status_code == 200:
             req.raise_for_status()
             data = req.json()
@@ -471,14 +451,12 @@ class Robinhood:
 
         return data
 
-
     @property
     def portfolios(self):
         req = self.session.get(self.endpoints['portfolios'])
         req.raise_for_status()
 
         return req.json()['results'][0]
-
 
     @property
     def adjusted_equity_previous_close(self):
@@ -489,7 +467,6 @@ class Robinhood:
 
         return float(self.portfolios['adjusted_equity_previous_close'])
 
-
     @property
     def equity(self):
         # Wrapper for portfolios
@@ -498,7 +475,6 @@ class Robinhood:
         #         (float): `equity` value
 
         return float(self.portfolios['equity'])
-
 
     @property
     def equity_previous_close(self):
@@ -509,7 +485,6 @@ class Robinhood:
 
         return float(self.portfolios['equity_previous_close'])
 
-
     @property
     def excess_margin(self):
         # Wrapper for portfolios
@@ -518,7 +493,6 @@ class Robinhood:
         #         (float): `excess_margin` value
 
         return float(self.portfolios['excess_margin'])
-
 
     @property
     def extended_hours_equity(self):
@@ -531,7 +505,6 @@ class Robinhood:
             return float(self.portfolios['extended_hours_equity'])
         except TypeError:
             return None
-
 
     @property
     def extended_hours_market_value(self):
@@ -546,7 +519,6 @@ class Robinhood:
             log.warn('Failed to get extended hours market value')
             return None
 
-
     @property
     def last_core_equity(self):
         # Wrapper for portfolios
@@ -555,7 +527,6 @@ class Robinhood:
         #         (float): `last_core_equity` value
 
         return float(self.portfolios['last_core_equity'])
-
 
     @property
     def last_core_market_value(self):
@@ -566,7 +537,6 @@ class Robinhood:
 
         return float(self.portfolios['last_core_market_value'])
 
-
     @property
     def market_value(self):
         # Wrapper for portfolios
@@ -575,7 +545,6 @@ class Robinhood:
         #         (float): `market_value` value
 
         return float(self.portfolios['market_value'])
-
 
     @property
     def order_history(self):
@@ -586,7 +555,6 @@ class Robinhood:
 
         return self.session.get(self.endpoints['orders']).json()
 
-
     @property
     def dividends(self):
         # Wrapper for portfolios
@@ -596,16 +564,14 @@ class Robinhood:
 
         return self.session.get(self.endpoints['dividends']).json()
 
-
     @property
     def positions(self):
         # Returns the user's positions data
-           
-                   #     Returns:
+
+        #     Returns:
         #         (:object: `dict`): JSON dict from getting positions
 
         return self.session.get(self.endpoints['positions']).json()
-
 
     @property
     def securities_owned(self):
@@ -617,7 +583,6 @@ class Robinhood:
         url = self.endpoints['positions'] + '?nonzero=true'
         return self.session.get(url).json()
 
-
     def place_market_order(
             self,
             instrument,
@@ -626,9 +591,8 @@ class Robinhood:
             bid_price=0.0,
             trigger='immediate',
             order='market',
-            time_in_force = 'gfd'
-        ):
-       
+            time_in_force='gfd'):
+
         if not bid_price:
             bid_price = self.quote_data(instrument['symbol'])['bid_price']
 
@@ -643,7 +607,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order.lower()
         }
-       
+
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -656,7 +620,6 @@ class Robinhood:
         else:
             raise Exception("Could not place order: " + res.text)
 
-
     def place_limit_order(
             self,
             instrument,
@@ -665,9 +628,8 @@ class Robinhood:
             transaction,
             trigger='immediate',
             order='limit',
-            time_in_force = 'gfd'
-        ):
-       
+            time_in_force='gfd'):
+
         payload = {
             'account': self.account['url'],
             'instrument': unquote(instrument['url']),
@@ -679,7 +641,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order.lower()
         }
-       
+
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -692,7 +654,6 @@ class Robinhood:
         else:
             raise Exception("Could not place order: " + res.text)
 
-
     def place_stop_limit_order(
             self,
             instrument,
@@ -702,9 +663,8 @@ class Robinhood:
             transaction,
             trigger='stop',
             order='limit',
-            time_in_force = 'gfd'
-        ):
-       
+            time_in_force='gfd'):
+
         payload = {
             'account': self.account['url'],
             'instrument': unquote(instrument['url']),
@@ -717,7 +677,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order,
         }
-       
+
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -730,7 +690,6 @@ class Robinhood:
         else:
             raise Exception("Could not place order: " + res.text)
 
-
     def place_stop_loss_order(
             self,
             instrument,
@@ -739,9 +698,8 @@ class Robinhood:
             transaction,
             trigger='stop',
             order='market',
-            time_in_force = 'gfd'
-        ):
-       
+            time_in_force='gfd'):
+
         payload = {
             'account': self.account['url'],
             'instrument': unquote(instrument['url']),
@@ -753,7 +711,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order.lower()
         }
-       
+
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -765,7 +723,6 @@ class Robinhood:
             return order_ID
         else:
             raise Exception("Could not place order: " + res.text)
-
 
     def cancel_order(self, order_id):
         payload = {}
@@ -779,7 +736,6 @@ class Robinhood:
             return res
         else:
             raise Exception("Could not cancel order: " + res.text)
-
 
     def get_user_info(self):
         # Pulls user info from API and stores it in Robinhood object
@@ -805,7 +761,6 @@ class Robinhood:
         else:
             raise Exception("Could not get basic user info: " + res.text)
 
-
     def order_details(self, order_ID):
         # Returns an order object which contains information about an order
         # and its status
@@ -815,11 +770,9 @@ class Robinhood:
         else:
             raise Exception("Could not get order status: " + res.text)
 
-
     def order_status(self, order_ID):
         # Returns an order status string
         return self.order_details(order_ID)['state']
-
 
     def list_orders(self):
         # returns a list of all order_IDs, ordered from newest to oldest
@@ -833,17 +786,16 @@ class Robinhood:
         else:
             raise Exception("Could not retrieve orders: " + res.text)
 
-
     def list_order_details(self):
         # Generates a dictionary where keys are order_IDs and values are
         # order objects.
         detailed_orders = {}
         for i in self.list_orders():
             order = self.order_details(i)
-            order['symbol'] = self.session.get(order['instrument']).json()['symbol']
+            order['symbol'] = self.session.get(order['instrument']).\
+                json()['symbol']
             detailed_orders[i] = order
         return detailed_orders
-
 
     def list_open_orders(self):
         open_orders = {}
@@ -853,10 +805,10 @@ class Robinhood:
             if details['state'] == 'queued' or \
                details['state'] == 'confirmed' or \
                details['state'] == 'partially_filled':
-                open_orders[order] = \
-                {
+                open_orders[order] = {
                     'dt': details['created_at'],
-                    'asset': self.session.get(details['instrument']).json()['symbol'],
+                    'asset':
+                    self.session.get(details['instrument']).json()['symbol'],
                     'amount': details['quantity'],
                     'stop_price': details['stop_price'],
                     'limit_price': details['price']

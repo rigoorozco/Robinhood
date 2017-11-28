@@ -107,8 +107,7 @@ setup(
     keywords='Robinhood trade API',
     packages=find_packages(),
     data_files=[
-        ('docs', include_all_subfiles('docs')),
-        ('tests', include_all_subfiles('tests'))
+        ('docs', include_all_subfiles('docs'))
     ],
     install_requires=get_requirements(),
     tests_require=get_requirements(True),
