@@ -1,0 +1,13 @@
+language: python
+sudo: false
+fast_finish: true
+python:
+  - 2.7
+  - 3.4
+  - 3.5
+cache:
+  directories:
+    - $HOME/.cache/.pip/
+
+install:
+  - pip install -r etc/requirements.txt --cache-dir=$CACHE_DIR
