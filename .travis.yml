@@ -16,4 +16,5 @@ install:
   - pip install -r requirements.txt --cache-dir=$CACHE_DIR
 
 script:
+  - flake8 Robinhood/
   - nosetests --with-coverage
