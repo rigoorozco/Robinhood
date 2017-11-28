@@ -428,7 +428,6 @@ class Robinhood:
 
         return res['results'][0]
 
-    @property
     def fundamentals(self, stock):
         # Find stock fundamentals data
 
