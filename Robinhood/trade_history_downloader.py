@@ -1,8 +1,8 @@
-import json
 import csv
 import shelve
 
 from Robinhood import Robinhood
+
 
 def get_symbol_from_instrument_url(rb_client, url, db):
     instrument = {}
@@ -19,8 +19,10 @@ def fetch_json_by_url(rb_client, url):
 
 
 def order_item_info(order, rb_client, db):
-    #side: .side,  price: .average_price, shares: .cumulative_quantity, instrument: .instrument, date : .last_transaction_at
-    symbol = get_symbol_from_instrument_url(rb_client, order['instrument'], db)
+    # side: .side,  price: .average_price, shares: .cumulative_quantity,
+    # instrument: .instrument, date : .last_transaction_at
+    symbol = get_symbol_from_instrument_url(rb_client,
+                                            order['instrument'], db)
     return {
         'side': order['side'],
         'price': order['average_price'],
@@ -45,7 +47,7 @@ def get_all_history_orders(rb_client):
 
 
 rb = Robinhood()
-# !!!!!! change the username and passs, be careful when paste the code to public
+# change the username and passs, be careful when paste the code to public!
 rb.login(username="name", password="pass")
 past_orders = get_all_history_orders(rb)
 instruments_db = shelve.open('instruments.db')
@@ -55,4 +57,3 @@ with open('orders.csv', 'w') as output_file:
     dict_writer = csv.DictWriter(output_file, keys)
     dict_writer.writeheader()
     dict_writer.writerows(orders)
-
