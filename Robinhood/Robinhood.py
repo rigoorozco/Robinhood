@@ -1,12 +1,8 @@
-"""Robinhood.py: a collection of utilities for working with Robinhood's Private API """
-
-#Standard libraries
-import logging
-import warnings
+# Robinhood.py: a collection of utilities for working with Robinhood's
+# Private API
 
 from enum import Enum
 
-#External dependencies
 from six.moves.urllib.parse import unquote
 from six.moves.urllib.request import getproxies
 from six.moves import input
@@ -15,26 +11,36 @@ import getpass
 import requests
 import six
 
-#Application-specific imports
-from . import exceptions as RH_exception
+from dateutil.parser import parse
+
+from logbook import Logger
+log = Logger('Robinhood API')
+
+
+class RobinhoodException(Exception):
+    # Wrapper for custom Robinhood library exceptions
+    pass
+
+
+class LoginFailed(RobinhoodException):
+    # Unable to login to Robinhood
+    pass
+
+
+class TwoFactorRequired(LoginFailed):
+    # Unable to login because of 2FA failure
+    pass
 
 
 class Bounds(Enum):
-    """Enum for bounds in `historicals` endpoint """
+    # Enum for bounds in `historicals` endpoint
 
     REGULAR = 'regular'
     EXTENDED = 'extended'
 
 
-class Transaction(Enum):
-    """Enum for buy/sell orders """
-
-    BUY = 'buy'
-    SELL = 'sell'
-
-
 class Robinhood:
-    """Wrapper class for fetching/parsing Robinhood endpoints """
+    # Wrapper class for fetching/parsing Robinhood endpoints
 
     endpoints = {
         "login": "https://api.robinhood.com/api-token-auth/",
@@ -70,13 +76,6 @@ class Robinhood:
     headers = None
     auth_token = None
 
-    logger = logging.getLogger('Robinhood')
-    logger.addHandler(logging.NullHandler())
-
-
-    ###########################################################################
-    #                       Logging in and initializing
-    ###########################################################################
 
     def __init__(self):
         self.session = requests.session()
@@ -95,7 +94,7 @@ class Robinhood:
 
 
     def login_prompt(self): #pragma: no cover
-        """Prompts user for username and password and calls login() """
+        # Prompts user for username and password and calls login()
 
         username = input("Username: ")
         password = getpass.getpass()
@@ -103,20 +102,18 @@ class Robinhood:
         return self.login(username=username, password=password)
 
 
-    def login(self, 
-              username, 
-              password, 
-              mfa_code=None):
-        """Save and test login info for Robinhood accounts
+    def login(self,
+                  username,
+                  password,
+                  mfa_code=None):
+        # Save and test login info for Robinhood accounts
 
-        Args:
-            username (str): username
-            password (str): password
+        # Args:
+        #     username (str): username
+        #     password (str): password
 
-        Returns:
-            (bool): received valid auth token
-
-        """
+        # Returns:
+        #     (bool): received valid auth token
 
         self.username = username
         self.password = password
@@ -136,7 +133,8 @@ class Robinhood:
             raise RH_exception.LoginFailed()
 
         if 'mfa_required' in data.keys():           #pragma: no cover
-            raise RH_exception.TwoFactorRequired()  #requires a second call to enable 2FA
+            raise RH_exception.TwoFactorRequired()
+            #requires a second call to enable 2FA
 
         if 'token' in data.keys():
             self.auth_token = data['token']
@@ -147,18 +145,16 @@ class Robinhood:
 
 
     def logout(self):
-        """Logout from Robinhood
+        # Logout from Robinhood
 
-        Returns:
-            (:obj:`requests.request`) result from logout endpoint
-
-        """
+        # Returns:
+        #     (:obj:`requests.request`) result from logout endpoint
 
         try:
             req = self.session.post(self.endpoints['logout'])
             req.raise_for_status()
         except requests.exceptions.HTTPError as err_msg:
-            warnings.warn('Failed to log out ' + repr(err_msg))
+            log.warn('Failed to log out ' + repr(err_msg))
 
         self.headers['Authorization'] = None
         self.auth_token = None
@@ -166,163 +162,81 @@ class Robinhood:
         return req
 
 
-    ###########################################################################
-    #                               GET DATA
-    ###########################################################################
-
     def get_url_content_json(self, url):
-        """fetch url content"""
         res = self.session.get(url)
-        res.raise_for_status()  #will throw without auth
+        res.raise_for_status()  # will throw without auth
         data = res.json()
         return data
 
+
     def investment_profile(self):
-        """Fetch investment_profile """
+        # Fetch investment_profile
+
+                # Returns:
+        #     dictionary with investment profile information
 
         res = self.session.get(self.endpoints['investment_profile'])
-        res.raise_for_status()  #will throw without auth
+        res.raise_for_status()  # will throw without auth
         data = res.json()
-
         return data
 
 
     def instruments(self, symbol):
-        ''' Generates an instrument object. Currently this is only used for 
-        placing orders, and generating and using the instrument object are handled
-        for you, so you can ignore this method'''
-        res = self.session.get(self.endpoints['instruments'], params={'query':symbol.upper()})
+        # Generates an instrument object. Currently this is only used for
+                # placing orders
+        res = self.session.get(self.endpoints['instruments'], \
+              params={'query':symbol.upper()})
         if res.status_code == 200:
-            return res.json()['results']
+            result = res.json()['results']
+            if len(result) > 0 and result[0]['symbol'] == symbol.upper():
+                return result[0]
+            else:
+                 raise Exception("Symbol queried was not found.")
         else:
-            raise Exception("Could not generate instrument object: %s " % res.headers)
+            raise Exception("Could not generate instrument object")
 
 
-    def quote_data(self, stock=''):
-        """Fetch stock quote
+    def quote_data(self, stock):
+        # Fetch stock quote
 
-            Args:
-                stock (str): stock ticker, prompt if blank
+        #     Args:
+        #         stock (str): stock ticker
 
-            Returns:
-                (:obj:`dict`): JSON contents from `quotes` endpoint
-        """
+        #     Returns:
+        #         (:obj:`dict`): JSON contents from `quotes` endpoint
 
-        url = None
+        url = str(self.endpoints['quotes']) + str(stock) + "/"
+        req = requests.get(url)
 
-        if stock.find(',') == -1:
-            url = str(self.endpoints['quotes']) + str(stock) + "/"
-        else:
-            url = str(self.endpoints['quotes']) + "?symbols=" + str(stock)
-
-        #Check for validity of symbol
-        try:
-            req = requests.get(url)
+        # Check for validity of symbol
+        if req.status_code == 200:
             req.raise_for_status()
             data = req.json()
-        except requests.exceptions.HTTPError:
-            raise RH_exception.InvalidTickerSymbol()
-
+        else:
+            raise Exception("Invalid ticker: " + req.text)
 
         return data
 
 
-    # We will keep for compatibility until next major release
-    def quotes_data(self, stocks):
-        """Fetch quote for multiple stocks, in one single Robinhood API call
+    def get_historical_quotes(self, stock, interval, span,
+                              bounds=Bounds.REGULAR):
+        # Fetch historical data for stock
 
-            Args:
-                stocks (list<str>): stock tickers
+        #     Note: valid interval/span configs
+        #         interval = 5minute | 10minute + span = day, week
+        #         interval = day + span = year
+        #         interval = week
+        #         TODO: NEEDS TESTS
 
-            Returns:
-                (:obj:`list` of :obj:`dict`): List of JSON contents from `quotes` endpoint, in the
-                    same order of input args. If any ticker is invalid, a None will occur at that position.
-        """
+        #     Args:
+        #         stock (str): stock ticker
+        #         interval (str): resolution of data
+        #         span (str): length of data
+        #         bounds (:enum:`Bounds`, optional): 'extended' or 'regular'
+                #         trading hours
 
-        url = str(self.endpoints['quotes']) + "?symbols=" + ",".join(stocks)
-
-        try:
-            req = requests.get(url)
-            req.raise_for_status()
-            data = req.json()
-        except requests.exceptions.HTTPError:
-            raise RH_exception.InvalidTickerSymbol()
-
-
-        return data["results"]
-
-
-    def get_quote_list(self, 
-                       stock='', 
-                       key=''):
-        """Returns multiple stock info and keys from quote_data (prompt if blank)
-
-            Args:
-                stock (str): stock ticker (or tickers separated by a comma)
-                , prompt if blank
-                key (str): key attributes that the function should return
-
-            Returns:
-                (:obj:`list`): Returns values from each stock or empty list
-                               if none of the stocks were valid
-
-        """
-
-        #Creates a tuple containing the information we want to retrieve
-        def append_stock(stock):
-            keys = key.split(',')
-            myStr = ''
-            for item in keys:
-                myStr += stock[item] + ","
-
-            return (myStr.split(','))
-
-
-        #Prompt for stock if not entered
-        if not stock:   #pragma: no cover
-            stock = input("Symbol: ")
-
-        data = self.quote_data(stock)
-        res = []
-
-        # Handles the case of multple tickers
-        if stock.find(',') != -1:
-            for stock in data['results']:
-                if stock is None:
-                    continue
-                res.append(append_stock(stock))
-
-        else:
-            res.append(append_stock(data))
-
-        return res
-
-
-    def get_quote(self, stock=''):
-        """Wrapper for quote_data """
-
-        data = self.quote_data(stock)
-        return data["symbol"]
-
-
-    def get_historical_quotes(self, stock, interval, span, bounds=Bounds.REGULAR):
-        """Fetch historical data for stock
-
-            Note: valid interval/span configs
-                interval = 5minute | 10minute + span = day, week
-                interval = day + span = year
-                interval = week
-                TODO: NEEDS TESTS
-
-            Args:
-                stock (str): stock ticker
-                interval (str): resolution of data
-                span (str): length of data
-                bounds (:enum:`Bounds`, optional): 'extended' or 'regular' trading hours
-
-            Returns:
-                (:obj:`dict`) values returned from `historicals` endpoint
-        """
+        #     Returns:
+        #         (:obj:`dict`) values returned from `historicals` endpoint
 
         if isinstance(bounds, str): #recast to Enum
             bounds = Bounds(bounds)
@@ -339,238 +253,193 @@ class Robinhood:
 
 
     def get_news(self, stock):
-        """Fetch news endpoint
-            Args:
-                stock (str): stock ticker
+        # Fetch news endpoint
+        #     Args:
+        #         stock (str): stock ticker
 
-            Returns:
-                (:obj:`dict`) values returned from `news` endpoint
-        """
+        #     Returns:
+        #         (:obj:`dict`) values returned from `news` endpoint
 
-        return self.session.get(self.endpoints['news']+stock.upper()+"/").json()
+        url = self.endpoints['news'] + stock.upper() + "/"
+        return self.session.get(url).json()
 
 
-    def print_quote(self, stock=''):    #pragma: no cover
-        """Print quote information
-            Args:
-                stock (str): ticker to fetch
+    def ask_price(self, stock):
+        # Get asking price for a stock
 
-            Returns:
-                None
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        data = self.get_quote_list(stock,'symbol,last_trade_price')
-        for item in data:
-            quote_str = item[0] + ": $" + item[1]
-            print(quote_str)
-            self.logger.info(quote_str)
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (float): ask price
 
-    def print_quotes(self, stocks): #pragma: no cover
-        """Print a collection of stocks
+        return float(self.quote_data(stock)['ask_price'])
 
-            Args:
-                stocks (:obj:`list`): list of stocks to pirnt
 
-            Returns:
-                None
-        """
+    def ask_size(self, stock):
+        # Get ask size for a stock
 
-        if stocks is None:
-            return
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        for stock in stocks:
-            self.print_quote(stock)
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (int): ask size
 
-    def ask_price(self, stock=''):
-        """Get asking price for a stock
+        return int(self.quote_data(stock)['ask_size'])
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def bid_price(self, stock):
+        # Get bid price for a stock
 
-            Returns:
-                (float): ask price
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'ask_price')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (float): bid price
 
-    def ask_size(self, stock=''):
-        """Get ask size for a stock
+        return float(self.quote_data(stock)['bid_price'])
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def bid_size(self, stock):
+        # Get bid size for a stock
 
-            Returns:
-                (int): ask size
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'ask_size')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (int): bid size
 
-    def bid_price(self, stock=''):
-        """Get bid price for a stock
+        return int(self.quote_data(stock)['bid_size'])
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def last_trade_price(self, stock):
+        # Get last trade price for a stock
 
-            Returns:
-                (float): bid price
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'bid_price')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (float): last trade price
 
-    def bid_size(self, stock=''):
-        """Get bid size for a stock
+        return float(self.quote_data(stock)['last_trade_price'])
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def previous_close(self, stock):
+        # Get previous closing price for a stock
 
-            Returns:
-                (int): bid size
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'bid_size')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (float): previous closing price
 
-    def last_trade_price(self, stock=''):
-        """Get last trade price for a stock
+        return float(self.quote_data(stock)['previous_close'])
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def previous_close_date(self, stock):
+        # Get previous closing date for a stock
 
-            Returns:
-                (float): last trade price
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'last_trade_price')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (str): previous close date
 
-    def previous_close(self, stock=''):
-        """Get previous closing price for a stock
+        return self.quote_data(stock)['previous_close_date']
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def adjusted_previous_close(self, stock):
+        # Get adjusted previous closing price for a stock
 
-            Returns:
-                (float): previous closing price
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'previous_close')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (float): adjusted previous closing price
 
-    def previous_close_date(self, stock=''):
-        """Get previous closing date for a stock
+        return float(self.quote_data(stock)['adjusted_previous_close'])
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def symbol(self, stock):
+        # Get symbol for a stock
 
-            Returns:
-                (str): previous close date
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'previous_close_date')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (str): stock symbol
 
-    def adjusted_previous_close(self, stock=''):
-        """Get adjusted previous closing price for a stock
+        return self.quote_data(stock)['symbol']
 
-            Note:
-                queries `quote` endpoint, dict wrapper
 
-            Args:
-                stock (str): stock ticker
+    def last_updated_at(self, stock):
+        # Get last update datetime
 
-            Returns:
-                (float): adjusted previous closing price
-        """
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
 
-        return self.get_quote_list(stock,'adjusted_previous_close')
+        #     Args:
+        #         stock (str): stock ticker
 
+        #     Returns:
+        #         (str): last update datetime
 
-    def symbol(self, stock=''):
-        """Get symbol for a stock
+        return self.quote_data(stock)['updated_at']
 
-            Note:
-                queries `quote` endpoint, dict wrapper
+   
+    def last_updated_at_datetime(self, stock):
+        # Get last updated datetime
 
-            Args:
-                stock (str): stock ticker
+        #     Note:
+        #         queries `quote` endpoint, dict wrapper
+        #         `self.last_updated_at` returns time as `str` in format:
+        #         'YYYY-MM-ddTHH:mm:ss:000Z'
 
-            Returns:
-                (str): stock symbol
-        """
+        #     Args:
+        #         stock (str): stock ticker
 
-        return self.get_quote_list(stock,'symbol')
+        #     Returns:
+        #         (datetime): last update datetime
 
-
-    def last_updated_at(self, stock=''):
-        """Get last update datetime
-
-            Note:
-                queries `quote` endpoint, dict wrapper
-
-            Args:
-                stock (str): stock ticker
-
-            Returns:
-                (str): last update datetime
-        """
-
-        return self.get_quote_list(stock, 'last_updated_at')
-
-    
-    def last_updated_at_datetime(self, stock=''):
-        """Get last updated datetime
-
-            Note:
-                queries `quote` endpoint, dict wrapper
-                `self.last_updated_at` returns time as `str` in format: 'YYYY-MM-ddTHH:mm:ss:000Z'
-
-            Args:
-                stock (str): stock ticker
-
-            Returns:
-                (datetime): last update datetime
-
-        """
-
-        #Will be in format: 'YYYY-MM-ddTHH:mm:ss:000Z'
         datetime_string = self.last_updated_at(stock)
-        result = dateutil.parser.parse(datetime_string)
+        result = parse(datetime_string)
 
         return result
 
 
-    def get_account(self):
-        """Fetch account information
+    @property
+    def account(self):
+        # Fetch account information
 
-            Returns:
-                (:obj:`dict`): `accounts` endpoint payload
-        """
+        #     Returns:
+        #         (:obj:`dict`): `accounts` endpoint payload
 
         res = self.session.get(self.endpoints['accounts'])
         res.raise_for_status()  #auth required
@@ -579,312 +448,174 @@ class Robinhood:
         return res['results'][0]
 
 
-    def get_url(self, url):
-        """
-            Flat wrapper for fetching URL directly
-        """
+    @property
+    def fundamentals(self, stock):
+        # Find stock fundamentals data
 
-        return self.session.get(url).json()
+        #     Args:
+        #         (str): stock ticker
 
-
-    ###########################################################################
-    #                           GET FUNDAMENTALS
-    ###########################################################################
-
-    def get_fundamentals(self, stock=''):
-        """Find stock fundamentals data
-
-            Args:
-                (str): stock ticker
-
-            Returns:
-                (:obj:`dict`): contents of `fundamentals` endpoint
-        """
-
-        #Prompt for stock if not entered
-        if not stock:   #pragma: no cover
-            stock = input("Symbol: ")
+        #     Returns:
+        #         (:obj:`dict`): contents of `fundamentals` endpoint
 
         url = str(self.endpoints['fundamentals']) + str(stock.upper()) + "/"
 
-        #Check for validity of symbol
-        try:
-            req = requests.get(url)
+        # Check for validity of symbol
+        req = requests.get(url)
+       
+        if req.status_code == 200:
             req.raise_for_status()
             data = req.json()
-        except requests.exceptions.HTTPError:
-            raise RH_exception.InvalidTickerSymbol()
-
+        else:
+            raise Exception("Ticker %s not found!" % stock)
 
         return data
 
 
-    def fundamentals(self, stock=''):
-        """Wrapper for get_fundamentlals function """
-
-        return self.get_fundamentals(stock)
-
-
-    ###########################################################################
-    #                           PORTFOLIOS DATA
-    ###########################################################################
-
+    @property
     def portfolios(self):
-        """Returns the user's portfolio data """
-
         req = self.session.get(self.endpoints['portfolios'])
         req.raise_for_status()
 
         return req.json()['results'][0]
 
 
+    @property
     def adjusted_equity_previous_close(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `adjusted_equity_previous_close` value
+        #     Returns:
+        #         (float): `adjusted_equity_previous_close` value
 
-        """
-
-        return float(self.portfolios()['adjusted_equity_previous_close'])
+        return float(self.portfolios['adjusted_equity_previous_close'])
 
 
+    @property
     def equity(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `equity` value
-        """
+        #     Returns:
+        #         (float): `equity` value
 
-        return float(self.portfolios()['equity'])
+        return float(self.portfolios['equity'])
 
 
+    @property
     def equity_previous_close(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `equity_previous_close` value
-        """
+        #     Returns:
+        #         (float): `equity_previous_close` value
 
-        return float(self.portfolios()['equity_previous_close'])
+        return float(self.portfolios['equity_previous_close'])
 
 
+    @property
     def excess_margin(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `excess_margin` value
-        """
+        #     Returns:
+        #         (float): `excess_margin` value
 
-        return float(self.portfolios()['excess_margin'])
+        return float(self.portfolios['excess_margin'])
 
 
+    @property
     def extended_hours_equity(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `extended_hours_equity` value
-        """
+        #     Returns:
+        #         (float): `extended_hours_equity` value
 
         try:
-            return float(self.portfolios()['extended_hours_equity'])
+            return float(self.portfolios['extended_hours_equity'])
         except TypeError:
             return None
 
 
+    @property
     def extended_hours_market_value(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `extended_hours_market_value` value
-        """
+        #     Returns:
+        #         (float): `extended_hours_market_value` value or None
 
         try:
-            return float(self.portfolios()['extended_hours_market_value'])
+            return float(self.portfolios['extended_hours_market_value'])
         except TypeError:
+            log.warn('Failed to get extended hours market value')
             return None
 
 
+    @property
     def last_core_equity(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `last_core_equity` value
-        """
+        #     Returns:
+        #         (float): `last_core_equity` value
 
-        return float(self.portfolios()['last_core_equity'])
+        return float(self.portfolios['last_core_equity'])
 
 
+    @property
     def last_core_market_value(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `last_core_market_value` value
-        """
+        #     Returns:
+        #         (float): `last_core_market_value` value
 
-        return float(self.portfolios()['last_core_market_value'])
+        return float(self.portfolios['last_core_market_value'])
 
 
+    @property
     def market_value(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (float): `market_value` value
-        """
+        #     Returns:
+        #         (float): `market_value` value
 
-        return float(self.portfolios()['market_value'])
+        return float(self.portfolios['market_value'])
 
 
+    @property
     def order_history(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (:obj:`dict`): JSON dict from getting orders
-        """
+        #     Returns:
+        #         (:obj:`dict`): JSON dict from getting orders
 
         return self.session.get(self.endpoints['orders']).json()
 
 
+    @property
     def dividends(self):
-        """Wrapper for portfolios
+        # Wrapper for portfolios
 
-            Returns:
-                (:obj: `dict`): JSON dict from getting dividends
-        """
+        #     Returns:
+        #         (:obj: `dict`): JSON dict from getting dividends
 
         return self.session.get(self.endpoints['dividends']).json()
 
 
-    ###########################################################################
-    #                           POSITIONS DATA
-    ###########################################################################
-
+    @property
     def positions(self):
-        """Returns the user's positions data
-            
-            Returns:
-                (:object: `dict`): JSON dict from getting positions
-        """
+        # Returns the user's positions data
+           
+                   #     Returns:
+        #         (:object: `dict`): JSON dict from getting positions
 
         return self.session.get(self.endpoints['positions']).json()
 
 
+    @property
     def securities_owned(self):
-        """Returns list of securities' symbols that the user has shares in 
+        # Returns list of securities' symbols that the user has shares in
 
-            Returns:
-                (:object: `dict`): Non-zero positions
-        """
+        #     Returns:
+        #         (:object: `dict`): Non-zero positions
 
-        return self.session.get(self.endpoints['positions']+'?nonzero=true').json()
-
-
-    ###########################################################################
-    #                               PLACE ORDER
-    ###########################################################################
-
-    def place_order(self,
-                    instrument,
-                    quantity=1,
-                    bid_price=0.0,
-                    transaction=None,
-                    trigger='immediate',
-                    order='market',
-                    time_in_force = 'gfd'):
-        """Place an order with Robinhood
-
-            Notes:
-                OMFG TEST THIS PLEASE!
-
-                Just realized this won't work since if type is LIMIT you need to use "price" and if
-                a STOP you need to use "stop_price".  Oops.
-                Reference: https://github.com/sanko/Robinhood/blob/master/Order.md#place-an-order
-
-            Args:
-                instrument (dict): the RH URL and symbol in dict for the instrument to be traded
-                quantity (int): quantity of stocks in order
-                bid_price (float): price for order
-                transaction (:enum:`Transaction`): BUY or SELL enum
-                trigger (:enum:`Trigger`): IMMEDIATE or STOP enum
-                order (:enum:`Order`): MARKET or LIMIT
-                time_in_force (:enum:`TIME_IN_FORCE`): GFD or GTC (day or until cancelled)
-
-            Returns:
-                (:obj:`requests.request`): result from `orders` put command
-        """
-
-        if isinstance(transaction, str):
-            transaction = Transaction(transaction)
-
-        if not bid_price:
-            bid_price = self.quote_data(instrument['symbol'])['bid_price']
-
-        payload = {
-            'account': self.get_account()['url'],
-            'instrument': unquote(instrument['url']),
-            'price': float(bid_price),
-            'quantity': quantity,
-            'side': transaction.name.lower(),
-            'symbol': instrument['symbol'],
-            'time_in_force': time_in_force.lower(),
-            'trigger': trigger,
-            'type': order.lower()
-        }
-
-        #data = 'account=%s&instrument=%s&price=%f&quantity=%d&side=%s&symbol=%s#&time_in_force=gfd&trigger=immediate&type=market' % (
-        #    self.get_account()['url'],
-        #    urllib.parse.unquote(instrument['url']),
-        #    float(bid_price),
-        #    quantity,
-        #    transaction,
-        #    instrument['symbol']
-        #)
-
-        res = self.session.post(self.endpoints['orders'], data=payload)
-        res.raise_for_status()
-
-        return res
-
-
-    def place_buy_order(self, 
-                        instrument, 
-                        quantity, 
-                        bid_price=0.0):
-        """Wrapper for placing buy orders
-
-            Args:
-                instrument (dict): the RH URL and symbol in dict for the instrument to be traded
-                quantity (int): quantity of stocks in order
-                bid_price (float): price for order
-
-            Returns:
-                (:obj:`requests.request`): result from `orders` put command
-
-        """
-
-        transaction = Transaction.BUY
-
-        return self.place_order(instrument, quantity, bid_price, transaction)
-
-
-    def place_sell_order(self, 
-                         instrument, 
-                         quantity, 
-                         bid_price=0.0):
-        """Wrapper for placing sell orders
-
-            Args:
-                instrument (dict): the RH URL and symbol in dict for the instrument to be traded
-                quantity (int): quantity of stocks in order
-                bid_price (float): price for order
-
-            Returns:
-                (:obj:`requests.request`): result from `orders` put command
-        """
-
-        transaction = Transaction.SELL
-
-        return self.place_order(instrument, quantity, bid_price, transaction)
+        url = self.endpoints['positions'] + '?nonzero=true'
+        return self.session.get(url).json()
 
 
     def place_market_order(
@@ -897,12 +628,12 @@ class Robinhood:
             order='market',
             time_in_force = 'gfd'
         ):
-        
+       
         if not bid_price:
             bid_price = self.quote_data(instrument['symbol'])['bid_price']
 
         payload = {
-            'account': self.get_account()['url'],
+            'account': self.account['url'],
             'instrument': unquote(instrument['url']),
             'price': float(bid_price),
             'quantity': quantity,
@@ -912,7 +643,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order.lower()
         }
-        
+       
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -936,9 +667,9 @@ class Robinhood:
             order='limit',
             time_in_force = 'gfd'
         ):
-        
+       
         payload = {
-            'account': self.get_account()['url'],
+            'account': self.account['url'],
             'instrument': unquote(instrument['url']),
             'price': float(limit_price),
             'quantity': quantity,
@@ -948,7 +679,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order.lower()
         }
-        
+       
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -973,9 +704,9 @@ class Robinhood:
             order='limit',
             time_in_force = 'gfd'
         ):
-        
+       
         payload = {
-            'account': self.get_account()['url'],
+            'account': self.account['url'],
             'instrument': unquote(instrument['url']),
             'price': float(limit_price),
             'stop_price': float(stop_price),
@@ -986,7 +717,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order,
         }
-        
+       
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -1010,9 +741,9 @@ class Robinhood:
             order='market',
             time_in_force = 'gfd'
         ):
-        
+       
         payload = {
-            'account': self.get_account()['url'],
+            'account': self.account['url'],
             'instrument': unquote(instrument['url']),
             'stop_price': float(stop_price),
             'quantity': quantity,
@@ -1022,7 +753,7 @@ class Robinhood:
             'trigger': trigger,
             'type': order.lower()
         }
-        
+       
         res = self.session.post(
             self.endpoints['orders'],
             data=payload
@@ -1051,7 +782,7 @@ class Robinhood:
 
 
     def get_user_info(self):
-        ''' Pulls user info from API and stores it in Robinhood object''' 
+        # Pulls user info from API and stores it in Robinhood object
         res = self.session.get(self.endpoints['user'])
         if res.status_code == 200:
             self.first_name = res.json()['first_name']
@@ -1076,8 +807,8 @@ class Robinhood:
 
 
     def order_details(self, order_ID):
-        ''' Returns an order object which contains information about an order 
-        and its status'''
+        # Returns an order object which contains information about an order
+        # and its status
         res = self.session.get(self.endpoints['orders'] + order_ID + "/")
         if res.status_code == 200:
             return res.json()
@@ -1086,22 +817,12 @@ class Robinhood:
 
 
     def order_status(self, order_ID):
-        ''' Returns an order status string'''
+        # Returns an order status string
         return self.order_details(order_ID)['state']
 
 
-    def advanced_order_status(self, order_ID):
-        ''' Will return number of shares completed, average price ... as a dict '''
-        pass
-
-
-    def get_order(self, order_ID):
-        ''' Will return a dict of order information for a given order ID '''
-        pass
-
-
     def list_orders(self):
-        ''' returns a list of all order_IDs, ordered from newest to oldest '''
+        # returns a list of all order_IDs, ordered from newest to oldest
         res = self.session.get(self.endpoints['orders'])
         if res.status_code == 200:
             orders = []
@@ -1114,8 +835,8 @@ class Robinhood:
 
 
     def list_order_details(self):
-        ''' Generates a dictionary where keys are order_IDs and values are 
-        order objects. '''
+        # Generates a dictionary where keys are order_IDs and values are
+        # order objects.
         detailed_orders = {}
         for i in self.list_orders():
             order = self.order_details(i)
@@ -1132,15 +853,13 @@ class Robinhood:
             if details['state'] == 'queued' or \
                details['state'] == 'confirmed' or \
                details['state'] == 'partially_filled':
-                open_orders[order] = {
-                                        'dt': details['created_at'],
-                                        'asset': self.session.get(details['instrument']).json()['symbol'],
-                                        'amount': details['quantity'],
-                                        'stop_price': details['stop_price'],
-                                        'limit_price': details['price']
-                                    }
+                open_orders[order] = \
+                {
+                    'dt': details['created_at'],
+                    'asset': self.session.get(details['instrument']).json()['symbol'],
+                    'amount': details['quantity'],
+                    'stop_price': details['stop_price'],
+                    'limit_price': details['price']
+                }
 
         return open_orders
-
-
-
