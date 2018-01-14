@@ -12,6 +12,8 @@ import requests
 
 from dateutil.parser import parse
 
+from collections import namedtuple, defaultdict, OrderedDict
+
 from logbook import Logger
 log = Logger('Robinhood API')
 
@@ -769,7 +771,8 @@ class Robinhood:
         # Returns an order status string
         return self.order_details(order_ID)['state']
 
-    def list_orders(self):
+    @property
+    def orders(self):
         # returns a list of all order_IDs, ordered from newest to oldest
         res = self.session.get(self.endpoints['orders'])
         if res.status_code == 200:
@@ -781,32 +784,59 @@ class Robinhood:
         else:
             raise Exception("Could not retrieve orders: " + res.text)
 
-    def list_order_details(self):
-        # Generates a dictionary where keys are order_IDs and values are
-        # order objects.
-        detailed_orders = {}
-        for i in self.list_orders():
-            order = self.order_details(i)
-            order['symbol'] = self.session.get(order['instrument']).\
-                json()['symbol']
-            detailed_orders[i] = order
-        return detailed_orders
-
-    def list_open_orders(self):
+    @property
+    def open_orders(self):
         open_orders = {}
 
-        for order in self.list_orders():
-            details = self.order_details(order)
-            if details['state'] == 'queued' or \
-               details['state'] == 'confirmed' or \
-               details['state'] == 'partially_filled':
-                open_orders[order] = {
-                    'dt': details['created_at'],
+        for order in self.order_history["results"]:
+            if order['state'] == 'queued' or \
+               order['state'] == 'confirmed' or \
+               order['state'] == 'partially_filled':
+                open_orders[order['id']] = {
+                    'dt': order['created_at'],
                     'asset':
-                    self.session.get(details['instrument']).json()['symbol'],
-                    'amount': details['quantity'],
-                    'stop_price': details['stop_price'],
-                    'limit_price': details['price']
+                    self.session.get(order['instrument']).json()['symbol'],
+                    'amount': float(order['quantity']),
+                    'stop_price': float(order['stop_price']) \
+                        if order['stop_price'] else None,
+                    'limit_price': float(order['price']) \
+                        if order['price'] else None,
+                    'action': order['side'],
+                    'state': order['state']
                 }
 
         return open_orders
+
+    @property
+    def order_status(self):
+        orders = {}
+
+        for order in self.order_history["results"]:
+            orders[order['id']] = {
+                'status': order['state'],
+                'filled': float(order['cumulative_quantity'])
+        }
+
+        return orders
+
+    @property
+    def executions(self):
+        executions = defaultdict(OrderedDict)
+        history = self.order_history["results"]
+
+        for order in history:
+            executions[order['id']] = {
+                'dt': order['created_at'],
+                'asset':
+                self.session.get(order['instrument']).json()['symbol'],
+                'amount': float(order['quantity']),
+                'stop_price': float(order['stop_price']) \
+                    if order['stop_price'] else None,
+                'limit_price': float(order['price']) \
+                    if order['price'] else None,
+                'action': order['side'],
+                'state': order['state'],
+                'filled': float(order['cumulative_quantity'])
+            }
+
+        return executions
