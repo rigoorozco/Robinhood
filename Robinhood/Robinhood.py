@@ -12,7 +12,7 @@ import requests
 
 from dateutil.parser import parse
 
-from collections import namedtuple, defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict
 
 from logbook import Logger
 log = Logger('Robinhood API')
@@ -767,10 +767,6 @@ class Robinhood:
         else:
             raise Exception("Could not get order status: " + res.text)
 
-    def order_status(self, order_ID):
-        # Returns an order status string
-        return self.order_details(order_ID)['state']
-
     @property
     def orders(self):
         # returns a list of all order_IDs, ordered from newest to oldest
@@ -797,9 +793,9 @@ class Robinhood:
                     'asset':
                     self.session.get(order['instrument']).json()['symbol'],
                     'amount': float(order['quantity']),
-                    'stop_price': float(order['stop_price']) \
+                    'stop_price': float(order['stop_price'])
                         if order['stop_price'] else None,
-                    'limit_price': float(order['price']) \
+                    'limit_price': float(order['price'])
                         if order['price'] else None,
                     'action': order['side'],
                     'state': order['state']
@@ -814,8 +810,7 @@ class Robinhood:
         for order in self.order_history["results"]:
             orders[order['id']] = {
                 'status': order['state'],
-                'filled': float(order['cumulative_quantity'])
-        }
+                'filled': float(order['cumulative_quantity'])}
 
         return orders
 
@@ -830,9 +825,9 @@ class Robinhood:
                 'asset':
                 self.session.get(order['instrument']).json()['symbol'],
                 'amount': float(order['quantity']),
-                'stop_price': float(order['stop_price']) \
+                'stop_price': float(order['stop_price'])
                     if order['stop_price'] else None,
-                'limit_price': float(order['price']) \
+                'limit_price': float(order['price'])
                     if order['price'] else None,
                 'action': order['side'],
                 'state': order['state'],
